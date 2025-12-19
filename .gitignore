@@ -1,0 +1,12 @@
+# AI Context outputs
+.claude/
+.ai-context/
+.ai/
+*-context.md
+
+# PowerShell
+*.ps1xml
+
+# OS
+.DS_Store
+Thumbs.db
