@@ -1,161 +1,95 @@
-# 🤖 AI Project Context Generator
+# AI Project Context Generator
 
-Generate comprehensive project context files for AI coding assistants like Claude, ChatGPT, and GitHub Copilot.
+A PowerShell script that scans your codebase and generates a single markdown file with all your source code. Useful for giving AI assistants full project context.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
+Works with any language or framework.
 
-## 📋 Overview
+## How it works
 
-This universal PowerShell script scans your entire codebase and generates a structured markdown file containing all your source code. Perfect for:
+The script walks your repository, skips binary files and common junk (node_modules, build artifacts, etc.), and writes everything else into a structured markdown file with syntax-highlighted code blocks.
 
-- 🤖 Providing full project context to AI assistants
-- 📚 Creating comprehensive code documentation
-- 🔍 Code reviews and audits
-- 📦 Project handoffs and onboarding
+Files are excluded in this order:
 
-**Works with any programming language or framework** - .NET, JavaScript, Python, Swift, Java, Go, Rust, and more!
+1. `.gitignore` patterns + built-in defaults (node_modules, bin, obj, dist, etc.)
+2. `.aiignore` patterns — an additional ignore file you control, specifically for hiding things from the AI context output
 
-## ✨ Features
+This means `.aiignore` is only about what gets shared with AI. Your git-ignored files are already excluded automatically.
 
-- ✅ **Universal** - Works with any codebase (web, mobile, desktop, embedded)
-- ✅ **Smart Filtering** - Respects `.gitignore` and detects binary files automatically
-- ✅ **40+ Languages** - Proper syntax highlighting for all major languages
-- ✅ **Auto-Discovery** - Finds repository root automatically
-- ✅ **Configurable** - Customize output location and filename
-- ✅ **Fast** - Processes thousands of files in seconds
-- ✅ **Safe** - Excludes binaries, media, node_modules, build artifacts
+## Prerequisites
 
-## 🚀 Getting Started
+- Windows PowerShell 5.1+ or PowerShell Core 7+
+- A git repository (optional but recommended — the script uses `.git` to find the project root)
 
-### Prerequisites
+## Installation
 
-- **Windows PowerShell 5.1+** or **PowerShell Core 7+** (cross-platform)
-- Git repository (optional, but recommended)
+Put `generate-context.ps1` somewhere in your repository. The root or a `scripts/` folder both work fine.
 
-### Installation
+## Usage
 
-1. **Download the script:**
-````powershell
-   # Clone the repository
-   git clone https://github.com/yourusername/ai-project-context.git
-   
-   # Or download just the script
-   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/yourusername/ai-project-context/main/generate-context.ps1" -OutFile "generate-context.ps1"
-````
-
-2. **Place the script:**
-   - Recommended: `your-project/src/generate-context.ps1`
-   - Alternative: Anywhere in your repository
-
-### Basic Usage
-````powershell
-# Navigate to your project
-cd C:\Projects\YourProject
-
-# Run the script
+```powershell
+# Basic — generates .claude/project-context.md at your repo root
 .\generate-context.ps1
-````
 
-**Output:** Creates `.claude/project-context.md` at your repository root.
-
-## 📖 Usage Examples
-
-### Basic Usage
-````powershell
-# Generate context with default settings
-.\generate-context.ps1
-````
-
-### Custom Output Directory
-````powershell
-# Use a different directory name
+# Custom output directory
 .\generate-context.ps1 -OutputDirName ".ai-context"
-````
 
-### Custom Filename
-````powershell
-# Change the output filename
+# Custom filename
 .\generate-context.ps1 -OutputFileName "full-context.md"
-````
 
-### Disable Auto Root-Finding
-````powershell
-# Use script's location as root instead of finding .git
+# Don't walk up to find .git — use script location as root
 .\generate-context.ps1 -FindRoot:$false
-````
 
-### Combined Options
-````powershell
-.\generate-context.ps1 -OutputDirName ".ai" -OutputFileName "codebase.md" -FindRoot:$false
-````
+# Custom .aiignore filename
+.\generate-context.ps1 -AiIgnoreFileName ".my-ai-ignore"
+```
 
-## ⚙️ Configuration
+## Parameters
 
-### Parameters
+| Parameter | Default | Description |
+|---|---|---|
+| `OutputDirName` | `.claude` | Output directory name |
+| `OutputFileName` | `project-context.md` | Output file name |
+| `FindRoot` | `$true` | Walk up to find `.git` directory as project root |
+| `AiIgnoreFileName` | `.aiignore` | Name of the AI-specific ignore file |
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `OutputDirName` | string | `.claude` | Name of output directory |
-| `OutputFileName` | string | `project-context.md` | Name of output file |
-| `FindRoot` | switch | `$true` | Auto-find repository root via .git |
+## The `.aiignore` file
 
-### What Gets Included?
+Create a `.aiignore` file in your repository root to exclude files and directories from the generated context. This is separate from `.gitignore` — it's for things that are tracked in git but shouldn't be sent to an AI assistant (secrets, credentials, internal configs, proprietary data, etc.).
 
-**✅ Included:**
-- All text-based source files
-- Configuration files (JSON, YAML, XML, etc.)
-- Scripts (PowerShell, Bash, Python, etc.)
-- Documentation (Markdown, etc.)
-- Project files (.csproj, package.json, etc.)
+The syntax follows the same conventions as `.gitignore`:
 
-**❌ Excluded:**
-- Binary files (executables, DLLs, images)
-- Build artifacts (bin/, obj/, dist/, node_modules/)
-- Media files (images, videos, audio, fonts)
-- Large files (>1MB)
-- Patterns in `.gitignore`
+```gitignore
+# Comments start with #
 
-### Customizing Exclusions
+# Ignore a directory
+secrets/
+config/production/
 
-The script automatically reads your `.gitignore`. To exclude additional patterns, simply add them to your `.gitignore`:
-````gitignore
-# Your existing patterns
-node_modules/
-dist/
+# Ignore specific files
+.env.production
+internal-api-keys.json
 
-# Additional exclusions for context generation
-*.generated.cs
-temp/
-````
+# Wildcard patterns
+*.secret
+*.credentials
+*-internal.*
+```
 
-## 🤝 Contributing
+### When to use `.aiignore` vs `.gitignore`
 
-Contributions welcome! Areas for improvement:
+- `.gitignore` — files that shouldn't be in version control at all (build output, local configs, etc.). These are already excluded from context generation automatically.
+- `.aiignore` — files that belong in the repo but shouldn't be shared with AI tools. Think: production secrets committed to a private repo, proprietary algorithms, client data, internal documentation you don't want leaving the company.
 
-- [ ] Add support for custom ignore files beyond `.gitignore`
-- [ ] Option to split large outputs into multiple files
-- [ ] Statistics and metrics in output
-- [ ] Progress bar for large repositories
-- [ ] Configuration file support
+### What gets excluded by default
 
-## 📝 Changelog
+Even without any ignore files, the script always skips:
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+- Binary files (executables, images, video, audio, fonts, archives, etc.)
+- Files larger than 1 MB
+- Common framework directories: node_modules, bin, obj, dist, build, vendor, target, __pycache__
+- IDE directories: .vs, .vscode, .idea
+- OS files: .DS_Store, Thumbs.db
 
-## 📜 License
+## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Inspired by the need to provide comprehensive context to AI coding assistants
-- Built for the AI-assisted development community
-
-## 💬 Support
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/ai-project-context/issues)
-- 💡 **Discussions**: [GitHub Discussions](https://github.com/yourusername/ai-project-context/discussions)
-- ⭐ **Star** this repo if you find it useful!
-
-````
+MIT

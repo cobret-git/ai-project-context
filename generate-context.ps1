@@ -4,18 +4,22 @@
 .DESCRIPTION
     Generates a comprehensive markdown file containing project structure and source code
     for use with AI coding assistants like Claude. Works with any project type.
+    Respects both .gitignore and .aiignore for filtering files.
 .PARAMETER OutputDirName
     Name of the output directory (default: .claude)
 .PARAMETER OutputFileName
     Name of the output file (default: project-context.md)
 .PARAMETER FindRoot
     Automatically find repository root by looking for .git directory
+.PARAMETER AiIgnoreFileName
+    Name of the AI-specific ignore file (default: .aiignore)
 #>
 
 param(
     [string]$OutputDirName = ".claude",
     [string]$OutputFileName = "project-context.md",
-    [switch]$FindRoot = $true
+    [switch]$FindRoot = $true,
+    [string]$AiIgnoreFileName = ".aiignore"
 )
 
 $ErrorActionPreference = "Stop"
@@ -168,14 +172,13 @@ function Test-BinaryFile {
     return $false
 }
 
-function Get-GitignorePatterns {
-    param([string]$RootPath)
+function Read-IgnorePatterns {
+    param([string]$FilePath)
     
     $patterns = @()
-    $gitignorePath = Join-Path $RootPath ".gitignore"
     
-    if (Test-Path $gitignorePath) {
-        $lines = Get-Content $gitignorePath -ErrorAction SilentlyContinue
+    if (Test-Path $FilePath) {
+        $lines = Get-Content $FilePath -ErrorAction SilentlyContinue
         foreach ($line in $lines) {
             $trimmed = $line.Trim()
             if ($trimmed -and -not $trimmed.StartsWith("#")) {
@@ -183,6 +186,15 @@ function Get-GitignorePatterns {
             }
         }
     }
+    
+    return $patterns
+}
+
+function Get-GitignorePatterns {
+    param([string]$RootPath)
+    
+    $gitignorePath = Join-Path $RootPath ".gitignore"
+    $patterns = @(Read-IgnorePatterns -FilePath $gitignorePath)
     
     # Add universal ignore patterns
     $patterns += @(
@@ -207,6 +219,18 @@ function Get-GitignorePatterns {
         ".gradle/",
         "target/"
     )
+    
+    return $patterns
+}
+
+function Get-AiIgnorePatterns {
+    param(
+        [string]$RootPath,
+        [string]$FileName
+    )
+    
+    $aiIgnorePath = Join-Path $RootPath $FileName
+    $patterns = @(Read-IgnorePatterns -FilePath $aiIgnorePath)
     
     return $patterns
 }
@@ -258,13 +282,13 @@ function Test-ShouldIgnore {
 # Main Script
 # ------------------------------------------------------------------
 
-Write-Host "🔍 Initializing project context generator..." -ForegroundColor Cyan
+Write-Host "Initializing project context generator..." -ForegroundColor Cyan
 
 # Determine root directory
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = if ($FindRoot) {
     $found = Find-RepositoryRoot $ScriptDir
-    Write-Host "📁 Repository root: $found" -ForegroundColor Yellow
+    Write-Host "Repository root: $found" -ForegroundColor Yellow
     $found
 } else {
     $ScriptDir
@@ -276,24 +300,39 @@ $OutputFile = Join-Path $OutputDir $OutputFileName
 
 if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
-    Write-Host "📂 Created output directory: $OutputDirName" -ForegroundColor Green
+    Write-Host "Created output directory: $OutputDirName" -ForegroundColor Green
 }
 
-# Load ignore patterns
-$IgnorePatterns = Get-GitignorePatterns -RootPath $RootDir
-Write-Host "🚫 Loaded $($IgnorePatterns.Count) ignore patterns" -ForegroundColor Yellow
+# Load ignore patterns — .gitignore first, then .aiignore on top
+$GitIgnorePatterns = Get-GitignorePatterns -RootPath $RootDir
+Write-Host "Loaded $($GitIgnorePatterns.Count) gitignore patterns" -ForegroundColor Yellow
+
+$AiIgnorePatterns = Get-AiIgnorePatterns -RootPath $RootDir -FileName $AiIgnoreFileName
+$aiIgnoreFullPath = Join-Path $RootDir $AiIgnoreFileName
+if (Test-Path $aiIgnoreFullPath) {
+    Write-Host "Loaded $($AiIgnorePatterns.Count) patterns from $AiIgnoreFileName" -ForegroundColor Yellow
+} else {
+    Write-Host "No $AiIgnoreFileName found — only .gitignore rules apply" -ForegroundColor DarkGray
+}
 
 # Collect files
-Write-Host "📄 Scanning for source files..." -ForegroundColor Cyan
+Write-Host "Scanning for source files..." -ForegroundColor Cyan
 
 $Files = Get-ChildItem -Path $RootDir -Recurse -File -ErrorAction SilentlyContinue |
     Where-Object {
-        -not (Test-ShouldIgnore -Path $_.FullName -RootPath $RootDir -Patterns $IgnorePatterns) -and
+        # First pass: skip everything matched by .gitignore + built-in patterns
+        -not (Test-ShouldIgnore -Path $_.FullName -RootPath $RootDir -Patterns $GitIgnorePatterns)
+    } |
+    Where-Object {
+        # Second pass: skip everything matched by .aiignore
+        -not (Test-ShouldIgnore -Path $_.FullName -RootPath $RootDir -Patterns $AiIgnorePatterns)
+    } |
+    Where-Object {
         -not (Test-BinaryFile -Path $_.FullName) -and
         $_.Length -lt 1MB  # Skip files larger than 1MB
     } | Sort-Object FullName
 
-Write-Host "✅ Found $($Files.Count) files to include" -ForegroundColor Green
+Write-Host "Found $($Files.Count) files to include" -ForegroundColor Green
 
 # Build markdown
 $content = @"
@@ -302,11 +341,11 @@ $content = @"
 > Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 > Root: $RootDir
 
-## 📋 Overview
+## Overview
 
 _TODO: Describe your project's purpose, architecture, key technologies, and any important constraints or conventions._
 
-## 📁 File Index
+## File Index
 
 "@
 
@@ -322,7 +361,7 @@ foreach ($file in $Files) {
     $content += "`n- $rel ($size)"
 }
 
-$content += "`n`n## 📦 Source Files`n"
+$content += "`n`n## Source Files`n"
 
 # Add file contents
 $fileCount = 0
@@ -351,8 +390,8 @@ Write-Progress -Activity "Processing files" -Completed
 # Write output
 [System.IO.File]::WriteAllText($OutputFile, $content, [System.Text.UTF8Encoding]::new($false))
 
-Write-Host "`n✨ Context file generated successfully!" -ForegroundColor Green
-Write-Host "📄 Output: " -NoNewline -ForegroundColor Cyan
+Write-Host "`nContext file generated successfully!" -ForegroundColor Green
+Write-Host "Output: " -NoNewline -ForegroundColor Cyan
 Write-Host $OutputFile -ForegroundColor White
-Write-Host "📊 Total files: $($Files.Count)" -ForegroundColor Cyan
-Write-Host "💾 File size: $([math]::Round((Get-Item $OutputFile).Length / 1KB, 1)) KB" -ForegroundColor Cyan
+Write-Host "Total files: $($Files.Count)" -ForegroundColor Cyan
+Write-Host "File size: $([math]::Round((Get-Item $OutputFile).Length / 1KB, 1)) KB" -ForegroundColor Cyan
