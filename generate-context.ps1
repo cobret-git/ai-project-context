@@ -309,7 +309,7 @@ if (Test-Path $OutputFile) {
     Write-Host "Removed previous output file: $OutputFileName" -ForegroundColor DarkGray
 }
 
-# Load ignore patterns — .gitignore first, then .aiignore on top
+# Load ignore patterns -- .gitignore first, then .aiignore on top
 $GitIgnorePatterns = Get-GitignorePatterns -RootPath $RootDir
 Write-Host "Loaded $($GitIgnorePatterns.Count) gitignore patterns" -ForegroundColor Yellow
 
@@ -318,7 +318,7 @@ $aiIgnoreFullPath = Join-Path $RootDir $AiIgnoreFileName
 if (Test-Path $aiIgnoreFullPath) {
     Write-Host "Loaded $($AiIgnorePatterns.Count) patterns from $AiIgnoreFileName" -ForegroundColor Yellow
 } else {
-    Write-Host "No $AiIgnoreFileName found — only .gitignore rules apply" -ForegroundColor DarkGray
+    Write-Host "No $AiIgnoreFileName found -- only .gitignore rules apply" -ForegroundColor DarkGray
 }
 
 # Collect files
