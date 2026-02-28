@@ -303,6 +303,12 @@ if (-not (Test-Path $OutputDir)) {
     Write-Host "Created output directory: $OutputDirName" -ForegroundColor Green
 }
 
+# Remove previous output file to prevent self-inclusion
+if (Test-Path $OutputFile) {
+    Remove-Item $OutputFile -Force
+    Write-Host "Removed previous output file: $OutputFileName" -ForegroundColor DarkGray
+}
+
 # Load ignore patterns — .gitignore first, then .aiignore on top
 $GitIgnorePatterns = Get-GitignorePatterns -RootPath $RootDir
 Write-Host "Loaded $($GitIgnorePatterns.Count) gitignore patterns" -ForegroundColor Yellow
@@ -319,6 +325,10 @@ if (Test-Path $aiIgnoreFullPath) {
 Write-Host "Scanning for source files..." -ForegroundColor Cyan
 
 $Files = Get-ChildItem -Path $RootDir -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object {
+        # Exclude our own output file
+        $_.FullName -ne $OutputFile
+    } |
     Where-Object {
         # First pass: skip everything matched by .gitignore + built-in patterns
         -not (Test-ShouldIgnore -Path $_.FullName -RootPath $RootDir -Patterns $GitIgnorePatterns)
